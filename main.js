@@ -407,7 +407,6 @@ var layout = new terminalWidgets.VBoxLayout([
 	new terminalWidgets.HBoxLayout([ scrapersStatusLabel, sortOptionsMenu ]), 
 	new terminalWidgets.HBoxLayout([ resultsMenu, resultsMenuVScrollBar ]), 
 	new terminalWidgets.HBoxLayout([ resultsMenuHScrollBar, resultsMenuScrollBarPad ]), 
-	//resultsMenuHScrollBar,
 	new terminalWidgets.HBoxLayout([ searchFieldHeaderLabel, searchFieldInput ]), 
 	debugLabel
 ]);
@@ -418,12 +417,6 @@ widgetContext.setWidget(layout);
 widgetContext.setFocus(resultsMenu);
 
 var tabOrder = [ resultsMenu, sortOptionsMenu, searchFieldInput ];
-
-// ===================
-// Main 
-// ===================
-
-
 var externalCommand = [];
 var query = "";
 var verbose = false;
@@ -493,7 +486,7 @@ for (i in scrapers) { (function() {
 
 var resolveTorrentLink = function(torrent, callback) {
 	if(torrent.torrent_link) {
-		//console.log(encodeURI(torrent.torrent_link));
+		
 		setTimeout( function() { callback(true, torrent.torrent_link); }, 0 );
 	} else if (torrent.torrent_site) {
 		torrent_search.torrentSearch(encodeURI(torrent.torrent_site)).then(
@@ -508,6 +501,7 @@ var resolveTorrentLink = function(torrent, callback) {
 		callback(false, "", "don't know how to download this torrent");
 	}
 }
+
 var processTorrent = function(torrent, callback) {
 	if(!torrent.torrent_link) {
 		logMessage("INFO", "parseTorrent", "Resolving torrent link...");
@@ -517,56 +511,26 @@ var processTorrent = function(torrent, callback) {
 		});
 		return;
 	}
-	executeExternalCommand(torrent, callback);
+	console.clear();
+	console.log(torrent.torrent_link);
+	process.exit();
 }
 
-var externalCommandRunning = false;
-var ignoreSignal = function() {};
-
-var executeExternalCommand = function(torrent, callback) {
-	var spawn = require('child_process').spawn;
-	process.stdin.setRawMode(false);
-	var translatedCommand = externalCommand.map( function(item) {
-		switch(item) {
-			case "{}": return torrent.torrent_link;
-			default: return item;
-		}
-	});
-	logMessage("INFO", "executeExternalCommand", "Starting ext command...");
-	widgetContext.draw();
-	setTimeout(function() { // delay execution so that the widget finishes impending drawing
-		var child = spawn(translatedCommand[0], translatedCommand.slice(1), { stdio: "inherit" } );
-		process.on('SIGINT', ignoreSignal);
-		externalCommandRunning = true;
-		child.on('close', function(code, signal) {
-				console.log("");i // add extra "\n" to the child output else we will overwrite the last line
-				logMessage("INFO", "executeExternalCommand", "Ext command result: " + (signal || code));
-				externalCommandRunning = false;
-				process.stdin.setRawMode(true);
-				process.removeListener('SIGINT', ignoreSignal);
-				callback(true);
-				});
-	},0);
-}
-
-process.stdout.write("\u001b[?7l"); // disable line wrap (linewrap causes problems when resizing the window quickly: the widget is rendred with a size assumption but upon display it does not match the window size anymore)
 process.on("exit", function() { process.stdout.write("\u001b[?7h"); }); // reenable linewrap on exit
-
 process.stdin.setRawMode(true);
+
 var stdinListener = function() {
-	if(externalCommandRunning) return; // child process will process the input
-        var key;
-        while((key = process.stdin.read()) != null) {
-                if(key.compare(new Buffer.from([ 3 ])) == 0) process.exit(0); // EX_OK
-                else if(key.compare(new Buffer.from([ 9 ])) == 0) {
-			widgetContext.setFocus( tabOrder[ (tabOrder.indexOf(widgetContext.focusedWidget) + 1) % tabOrder.length ] );
-		}
-                else widgetContext.handleKeyEvent(key);
-                widgetContext.draw();
-        }
+	var key;
+	while((key = process.stdin.read()) != null) {
+			if(key.compare(new Buffer.from([ 3 ])) == 0) process.exit(0); // EX_OK
+			else if(key.compare(new Buffer.from([ 9 ])) == 0) {
+		widgetContext.setFocus( tabOrder[ (tabOrder.indexOf(widgetContext.focusedWidget) + 1) % tabOrder.length ] );
+	}
+			else widgetContext.handleKeyEvent(key);
+			widgetContext.draw();
+	}
 };
+
 process.stdin.on('readable', stdinListener);
 process.stdout.on('resize', function() { if(externalCommandRunning) return; searchFieldInput.moveCursor({line: 0, col: 0}); widgetContext.draw(); });
-
 widgetContext.draw();
-
